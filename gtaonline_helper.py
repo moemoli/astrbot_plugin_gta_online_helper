@@ -15,6 +15,7 @@ _AUTHORIZATION = ""
 _REFRESH_COOKIES: dict[str, str] = {}
 _JWT_RE = re.compile(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
 _REFRESH_PERSIST_CALLBACK: Callable[[str, dict[str, str]], Awaitable[None]] | None = None
+_PLUGIN_LOG_ENABLED = True
 
 _REFRESH_COOKIE_KEYS = (
     "TS01008f56",
@@ -26,6 +27,22 @@ _REFRESH_COOKIE_KEYS = (
 
 PRIVATE_STATS_ENDPOINTS = (
 )
+
+
+def set_plugin_log_enabled(enabled: bool) -> None:
+    """Enable or disable plugin informational logs."""
+    global _PLUGIN_LOG_ENABLED
+    _PLUGIN_LOG_ENABLED = bool(enabled)
+
+
+def is_plugin_log_enabled() -> bool:
+    """Return whether informational plugin logs are enabled."""
+    return _PLUGIN_LOG_ENABLED
+
+
+def _log_info(msg: str, *args: Any) -> None:
+    if _PLUGIN_LOG_ENABLED:
+        logger.info(msg, *args)
 
 
 async def _hqshi_get(
@@ -186,7 +203,7 @@ def set_refresh_cookies(cookies: dict[str, str]) -> None:
     _REFRESH_COOKIES = normalized
 
     missing = [key for key in _REFRESH_COOKIE_KEYS if key not in normalized]
-    logger.info(
+    _log_info(
         "[gta_online_helper] set_refresh_cookies called, keys=%s, missing_required=%s",
         sorted(normalized.keys()),
         missing,
@@ -241,7 +258,7 @@ def _parse_set_cookie_headers(set_cookie_values: CIMultiDictProxy[str]) -> dict[
     parsed: dict[str, str] = {}
     for header, value in set_cookie_values.items():
         if header.lower() in ("set-cookie"):
-            logger.info("Parsing Set-Cookie header: %s", value)
+            _log_info("Parsing Set-Cookie header: %s", value)
             jar = SimpleCookie()
             try:
                 jar.load(value)
@@ -250,7 +267,7 @@ def _parse_set_cookie_headers(set_cookie_values: CIMultiDictProxy[str]) -> dict[
             for key, morsel in jar.items():
                 value = morsel.value.strip()
                 if value:
-                    logger.info("parsed cookie: %s=%s", key, value)
+                    _log_info("parsed cookie: %s=%s", key, value)
                     parsed[key] = value
                     
     return parsed
@@ -268,7 +285,7 @@ def _extract_bearer_from_response(cookies: dict[str,str]) -> str:
 async def refresh_authorization(timeout_seconds: int = 10) -> str:
     """Refresh BearerToken with cached cookies and return new token."""
     current_token = get_authorization().strip()
-    logger.info(
+    _log_info(
         "[gta_online_helper] refresh_authorization start, timeout=%s, token=%s",
         timeout_seconds,
         _mask_token(current_token),
@@ -289,12 +306,12 @@ async def refresh_authorization(timeout_seconds: int = 10) -> str:
     cookie_data["BearerToken"] = current_token
     cookie_data.setdefault("AutoLoginCheck", "1")
     cookie_header = ";".join(f"{k}={v}" for k, v in cookie_data.items())
-    logger.info(
+    _log_info(
         "[gta_online_helper] refresh_authorization request prepared, cookie_keys=%s",
         sorted(cookie_data.keys()),
     )
     
-    logger.info("refresh with cookie: %s",cookie_header)
+    _log_info("refresh with cookie: %s", cookie_header)
 
     headers = {
         "X-Requested-With": "XMLHttpRequest",
@@ -320,7 +337,7 @@ async def refresh_authorization(timeout_seconds: int = 10) -> str:
         ) as response:
             response_text = await response.text()
             response_cookie_map = _parse_set_cookie_headers(response.headers)
-            logger.info(
+            _log_info(
                 "[gta_online_helper] refresh response: status=%s, content_type=%s, redirect_count=%s, body_len=%s, body_preview=%s",
                 response.status,
                 response.headers.get("Content-Type"),
@@ -337,7 +354,7 @@ async def refresh_authorization(timeout_seconds: int = 10) -> str:
                 jar_token = jar_cookies.get("BearerToken")
                 if jar_token and jar_token.value:
                     new_token = jar_token.value.strip()
-            logger.info(
+            _log_info(
                 "[gta_online_helper] refresh bearer extracted=%s",
                 bool(new_token),
             )
@@ -346,7 +363,7 @@ async def refresh_authorization(timeout_seconds: int = 10) -> str:
                 merged = get_refresh_cookies()
                 merged.update(response_cookie_map)
                 set_refresh_cookies(merged)
-                logger.info(
+                _log_info(
                     "[gta_online_helper] refresh cached all response cookies, keys=%s",
                     sorted(response_cookie_map.keys()),
                 )
@@ -366,10 +383,10 @@ async def refresh_authorization(timeout_seconds: int = 10) -> str:
     if _REFRESH_PERSIST_CALLBACK is not None:
         try:
             await _REFRESH_PERSIST_CALLBACK(get_authorization(), get_refresh_cookies())
-            logger.info("[gta_online_helper] persisted refreshed auth/cookies via callback")
+            _log_info("[gta_online_helper] persisted refreshed auth/cookies via callback")
         except Exception as e:
             logger.warning("[gta_online_helper] persist callback failed: %s", e)
-    logger.info(
+    _log_info(
         "[gta_online_helper] refresh_authorization success, new_token=%s",
         _mask_token(new_token),
     )

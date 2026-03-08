@@ -12,6 +12,24 @@ BATTLEYE_SERVER_PORT = 61455
 BATTLEYE_TIMEOUT_SECONDS = 5
 
 
+def configure_battleye(
+    host: str | None = None,
+    port: int | None = None,
+    timeout_seconds: int | None = None,
+) -> None:
+    """Configure BattlEye query target and timeout at runtime."""
+    global BATTLEYE_SERVER_HOST, BATTLEYE_SERVER_PORT, BATTLEYE_TIMEOUT_SECONDS
+
+    if isinstance(host, str) and host.strip():
+        BATTLEYE_SERVER_HOST = host.strip()
+
+    if port is not None:
+        BATTLEYE_SERVER_PORT = int(port)
+
+    if timeout_seconds is not None:
+        BATTLEYE_TIMEOUT_SECONDS = int(timeout_seconds)
+
+
 def compute_be_id(rid: int) -> str:
     """Compute BattlEye ID from Rockstar ID."""
     rid_base64 = base64.b64encode(str(rid).encode("utf-8")).decode("ascii")
