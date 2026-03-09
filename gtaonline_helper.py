@@ -441,7 +441,18 @@ async def get_profile(
 
 
 async def name_to_rid(name: str) -> int:
-    """Convert player name to Rockstar ID (rid) via get_profile API."""
+    """Convert player name to Rockstar ID (rid), preferring HQSHI status API first."""
+    # Prefer HQSHI status because it can resolve rid without Rockstar Authorization.
+    try:
+        status = await get_hqshi_status(name, limit=1)
+        rid_value = status.get("rockstar_id")
+        if isinstance(rid_value, int):
+            return rid_value
+        if isinstance(rid_value, str) and rid_value.strip():
+            return int(rid_value.strip())
+    except Exception as e:
+        _log_info("[gta_online_helper] HQSHI rid lookup failed for %s: %s", name, e)
+
     data = await get_profile(name)
 
     accounts = data.get("accounts")
